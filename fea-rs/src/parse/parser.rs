@@ -73,6 +73,40 @@ impl<'a> Parser<'a> {
         self.buf.nth(n).unwrap().token
     }
 
+    pub(crate) fn nth_raw(&self, n: usize) -> &[u8] {
+        let range = self.nth_range(n);
+        &self.text.as_bytes()[range]
+    }
+
+    pub(crate) fn current_token_text(&self) -> &str {
+        &self.text[self.nth_range(0)]
+    }
+
+    /// lookahead at tokens, trying to match a condition.
+    ///
+    /// This accepts a function that returns an `Option<bool>`. If this returns
+    /// `Some` for any lexeme, we stop looking and return that result. Otherwise
+    /// we return `None`.
+    pub(crate) fn lookahead(&mut self, mut f: impl FnMut(&Lexeme) -> Option<bool>) -> Option<bool> {
+        const RELOAD_SIZE: usize = 4;
+        let mut next_n = 0;
+        loop {
+            if next_n == self.buf.len() {
+                self.ensure_lookahead(next_n + RELOAD_SIZE);
+            }
+            let next = self.buf.nth(next_n).unwrap();
+            if matches!(next.token.kind, LexemeKind::Eof) {
+                break;
+            }
+            let r = f(&next.token);
+            if r.is_some() {
+                return r;
+            }
+            next_n += 1;
+        }
+        None
+    }
+
     pub(crate) fn start_node(&mut self, kind: Kind) {
         self.sink.start_node(kind);
     }
@@ -91,15 +125,6 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn finish_and_remap_node(&mut self, new_kind: Kind) {
         self.sink.finish_node(Some(new_kind))
-    }
-
-    pub(crate) fn nth_raw(&self, n: usize) -> &[u8] {
-        let range = self.nth_range(n);
-        &self.text.as_bytes()[range]
-    }
-
-    pub(crate) fn current_token_text(&self) -> &str {
-        &self.text[self.nth_range(0)]
     }
 
     /// advance `N` lexemes, remapping to `Kind`.

@@ -79,7 +79,19 @@ pub(crate) fn gpos(parser: &mut Parser, recovery: TokenSet) {
     }
 
     parser.eat_trivia();
-    parser.start_node(AstKind::GposNode);
+    let has_marked_glyph = parser
+        .lookahead(|t| match t.kind {
+            Kind::SingleQuote => Some(true),
+            Kind::Semi => Some(false),
+            _ => None,
+        })
+        .unwrap_or(false);
+    let kind = if has_marked_glyph {
+        AstKind::GposType7
+    } else {
+        AstKind::GposNode
+    };
+    parser.start_node(kind);
     let kind = gpos_body(parser, recovery);
     parser.finish_and_remap_node(kind);
 }
