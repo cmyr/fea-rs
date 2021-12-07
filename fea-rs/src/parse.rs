@@ -3,6 +3,7 @@
 mod context;
 pub mod grammar;
 mod lexer;
+mod lookahead;
 mod parser;
 mod source;
 mod tree;

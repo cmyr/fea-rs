@@ -7,14 +7,15 @@ use fonttools::types::Tag;
 
 use super::{
     lexer::{Kind as LexemeKind, Lexeme, Lexer, TokenSet},
+    lookahead::Lookahead,
     FileId,
 };
 use crate::token_tree::{Kind, TreeSink};
 
 use crate::diagnostic::Diagnostic;
 
-const LOOKAHEAD: usize = 4;
-const LOOKAHEAD_MAX: usize = LOOKAHEAD - 1;
+const LOOKAHEAD_MIN: usize = 4;
+const LOOKAHEAD_RELOAD: usize = 32;
 
 /// A parsing context.
 ///
@@ -28,22 +29,7 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
     sink: &'a mut dyn TreeSink,
     text: &'a str,
-    buf: [PendingToken; LOOKAHEAD],
-}
-
-/// A non-trivia token, as well as any trivia preceding that token.
-///
-/// We don't want to worry about trivia for the purposes of most parsing,
-/// but we do need to track it in the tree. To achieve this, we collect trivia
-/// and store it attached to the subsequent non-trivia token, and then add it
-/// to the tree when that token is consumed.
-struct PendingToken {
-    preceding_trivia: Vec<Lexeme>,
-    // the position of the first token, including trivia
-    start_pos: usize,
-    // total length of trivia
-    trivia_len: usize,
-    token: Lexeme,
+    buf: Lookahead,
 }
 
 /// An error encountered while parsing.
@@ -63,40 +49,28 @@ pub struct TagToken {
     pub range: Range<usize>,
 }
 
-impl PendingToken {
-    const EMPTY: PendingToken = PendingToken {
-        preceding_trivia: Vec::new(),
-        start_pos: 0,
-        trivia_len: 0,
-        token: Lexeme::EMPTY,
-    };
-}
-
 impl<'a> Parser<'a> {
     pub(crate) fn new(text: &'a str, sink: &'a mut dyn TreeSink) -> Self {
         let mut this = Parser {
             lexer: Lexer::new(text),
             sink,
             text,
-            buf: [PendingToken::EMPTY; LOOKAHEAD],
+            buf: Lookahead::default(),
         };
 
         // preload the buffer; this accumulates any errors
-        for _ in 0..LOOKAHEAD {
-            this.advance();
-        }
+        this.ensure_lookahead(LOOKAHEAD_RELOAD);
         this
     }
 
     pub(crate) fn nth_range(&self, n: usize) -> Range<usize> {
-        assert!(n < LOOKAHEAD);
-        let start = self.buf[n].start_pos + self.buf[n].trivia_len;
-        start..start + self.buf[n].token.len
+        assert!(n < LOOKAHEAD_MIN);
+        self.buf.nth(n).unwrap().token_range()
     }
 
     pub(crate) fn nth(&self, n: usize) -> Lexeme {
-        assert!(n <= LOOKAHEAD_MAX);
-        self.buf[n].token
+        assert!(n < LOOKAHEAD_MIN);
+        self.buf.nth(n).unwrap().token
     }
 
     pub(crate) fn start_node(&mut self, kind: Kind) {
@@ -140,46 +114,37 @@ impl<'a> Parser<'a> {
 
     fn advance(&mut self) {
         self.eat_trivia();
-
-        let prev_token = &self.buf[LOOKAHEAD_MAX];
-        let new_start = prev_token.start_pos + prev_token.trivia_len + prev_token.token.len;
-        self.buf.rotate_left(1);
-
-        let mut pending = &mut self.buf[LOOKAHEAD_MAX];
-        pending.start_pos = new_start;
-        pending.trivia_len = 0;
-        pending.token = loop {
-            let token = self.lexer.next_token();
-            if token.kind.is_trivia() {
-                pending.trivia_len += token.len;
-                pending.preceding_trivia.push(token);
-            } else {
-                break token;
-            }
-        };
-
-        self.validate_new_token();
+        self.buf.advance();
+        if self.buf.len() < LOOKAHEAD_MIN {
+            self.ensure_lookahead(LOOKAHEAD_RELOAD)
+        }
     }
 
-    fn validate_new_token(&mut self) {
-        if let Some((replace_kind, error)) = match self.nth(LOOKAHEAD_MAX).kind {
-            LexemeKind::StringUnterminated => Some((
-                LexemeKind::String,
-                "Unterminated string (missing trailing '\"')",
-            )),
-            LexemeKind::HexEmpty => {
-                Some((LexemeKind::Hex, "Missing digits after hexidecimal prefix."))
+    fn ensure_lookahead(&mut self, n: usize) {
+        let to_add = (n + 1).saturating_sub(self.buf.len());
+        for _ in 0..to_add {
+            let Parser {
+                lexer, buf: buf2, ..
+            } = self;
+            let result = buf2.add(|pending| {
+                pending.token = loop {
+                    let token = lexer.next_token();
+                    if token.kind.is_trivia() {
+                        pending.trivia_len += token.len;
+                        pending.preceding_trivia.push(token);
+                    } else {
+                        break token;
+                    }
+                };
+            });
+
+            if let Err(lex_err) = result {
+                self.sink.error(Diagnostic::error(
+                    FileId::CURRENT_FILE,
+                    lex_err.range,
+                    lex_err.message,
+                ));
             }
-            _ => None,
-        } {
-            let mut range = self.nth_range(LOOKAHEAD_MAX);
-            // for unterminated string, error only points to opening "
-            if replace_kind == LexemeKind::String {
-                range.end = range.start + 1;
-            }
-            self.sink
-                .error(Diagnostic::error(FileId::CURRENT_FILE, range, error));
-            self.buf[LOOKAHEAD_MAX].token.kind = replace_kind;
         }
     }
 
@@ -239,11 +204,9 @@ impl<'a> Parser<'a> {
     /// other tokens. It is useful only when trivia should or should not be
     /// associated with a particular node.
     pub(crate) fn eat_trivia(&mut self) {
-        for token in self.buf[0].preceding_trivia.drain(..) {
+        for token in self.buf.take_first_trivia() {
             self.sink.token(token.kind.to_token_kind(), token.len);
         }
-        self.buf[0].start_pos += self.buf[0].trivia_len;
-        self.buf[0].trivia_len = 0;
     }
 
     pub(crate) fn err_and_bump(&mut self, error: impl Into<String>) {
@@ -278,7 +241,7 @@ impl<'a> Parser<'a> {
     ///
     /// In practice this is useful when missing things like semis or braces.
     pub(crate) fn err_before_ws(&mut self, error: impl Into<String>) {
-        let pos = self.buf[0].start_pos;
+        let pos = self.buf.cur_pos();
         self.raw_error(pos..pos + 1, error);
     }
 
@@ -287,7 +250,7 @@ impl<'a> Parser<'a> {
     /// This only exists so we can warn if a semi is missing after an include
     /// statement (which is common in the wild)
     pub(crate) fn warn_before_ws(&mut self, error: impl Into<String>) {
-        let pos = self.buf[0].start_pos;
+        let pos = self.buf.cur_pos();
         let diagnostic = Diagnostic::warning(FileId::CURRENT_FILE, pos..pos + 1, error);
         self.sink.error(diagnostic);
     }
