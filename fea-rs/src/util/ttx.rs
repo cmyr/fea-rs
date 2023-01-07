@@ -98,6 +98,8 @@ pub enum TestResult {
         result: String,
         diff_percent: f64,
     },
+    /// A catchall for other failures
+    Other(String),
 }
 
 struct ReasonPrinter<'a> {
@@ -551,7 +553,9 @@ impl Report {
                 TestResult::Panic => summary.panic += 1,
                 TestResult::ParseFail(_) => summary.parse += 1,
                 TestResult::CompileFail(_) => summary.compile += 1,
-                TestResult::UnexpectedSuccess | TestResult::TtxFail { .. } => summary.other += 1,
+                TestResult::UnexpectedSuccess
+                | TestResult::TtxFail { .. }
+                | TestResult::Other(_) => summary.other += 1,
                 TestResult::CompareFail { diff_percent, .. } => {
                     summary.compare += 1;
                     summary.sum_compare_perc += diff_percent;
@@ -567,8 +571,9 @@ impl TestResult {
         match self {
             Self::Success => 1,
             Self::Panic => 2,
-            Self::ParseFail(_) => 3,
-            Self::CompileFail(_) => 4,
+            Self::Other(_) => 3,
+            Self::ParseFail(_) => 4,
+            Self::CompileFail(_) => 5,
             Self::UnexpectedSuccess => 6,
             Self::TtxFail { .. } => 10,
             Self::CompareFail { .. } => 50,
@@ -715,6 +720,7 @@ impl Display for ReasonPrinter<'_> {
         match self.reason {
             TestResult::Success => write!(f, "{}", Color::Green.paint("success")),
             TestResult::Panic => write!(f, "{}", Color::Red.paint("panic")),
+            TestResult::Other(reason) => write!(f, "{} {reason}", Color::Purple.paint("other")),
             TestResult::ParseFail(diagnostics) => {
                 write!(f, "{}", Color::Purple.paint("parse failure"))?;
                 if self.verbose {

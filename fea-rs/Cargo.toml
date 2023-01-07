@@ -47,3 +47,7 @@ path = "src/bin/compile.rs"
 [[bin]]
 name = "ttx_test"
 required-features = ["test"]
+
+[[bin]]
+name = "compile_bulk_ufos"
+required-features = ["test"]
