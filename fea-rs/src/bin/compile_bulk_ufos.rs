@@ -9,14 +9,12 @@ use fea_rs::{
     GlyphMap,
 };
 
-static TEST_DATA: &str = "./fea-rs/test-data/fonttools-tests";
-static WIP_DIFF_DIR: &str = "./wip";
-
 fn main() {
     let args = Args::parse();
     let to_run = std::fs::read_to_string(&args.input).expect("failed to read input");
+    let filter = test_utils::Filter::new(args.test_filter.as_ref());
     let mut results = Vec::new();
-    for path in to_run.lines() {
+    for path in to_run.lines().filter(|line| filter.filter(line)) {
         let path = Path::new(path);
         let request = norad::DataRequest::none().lib(true);
         let Ok(font) = norad::Font::load_requested_data(&path, request) else { continue };
@@ -57,11 +55,7 @@ fn try_compile_body(ufo_path: &Path, glyph_map: &GlyphMap) -> Result<(), TestCas
         Ok(node) => match compile::compile(&node, glyph_map) {
             Ok(output) => {
                 if let Ok(mut built) = output.build_raw(glyph_map, Opts::new()) {
-                    let bytes = built.build();
-                    let out_file = Path::new(ufo_path.file_name().unwrap()).with_extension("ttf");
-                    let out_path = Path::new(WIP_DIFF_DIR).join(&out_file);
-                    //eprintln!("writing {} to {}", bytes.len(), out_path.display());
-                    std::fs::write(out_path, bytes).unwrap();
+                    let _bytes = built.build();
                 }
                 Ok(())
             }
@@ -85,7 +79,9 @@ struct Args {
     /// comparison fails.
     #[arg(short, long)]
     verbose: bool,
-    /// Compare results against those previously saved
-    #[arg(short, long)]
-    compare: Option<PathBuf>,
+    /// Optional comma separated list of words for filtering which fonts to build.
+    ///
+    /// e.g.: -t "font1,otherfont" matches font1-regular.ufo, otherfont.ufo, etc
+    #[arg(short, long = "test")]
+    test_filter: Option<String>,
 }
