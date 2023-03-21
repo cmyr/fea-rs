@@ -240,16 +240,28 @@ impl StatBuilder {
                 let value = match &axis_value.location {
                     AxisLocation::One { value, .. } => tables::stat::AxisValue::format_1(
                         //TODO: validate that all referenced tags refer to existing axes
-                        i as u16, flags, name_id.into(), *value,
+                        i as u16,
+                        flags,
+                        name_id.into(),
+                        *value,
                     ),
                     AxisLocation::Two {
                         nominal, min, max, ..
                     } => tables::stat::AxisValue::format_2(
-                        i as _, flags, name_id.into(), *nominal, *min, *max,
+                        i as _,
+                        flags,
+                        name_id.into(),
+                        *nominal,
+                        *min,
+                        *max,
                     ),
-                    AxisLocation::Three { value, linked, .. } => {
-                        tables::stat::AxisValue::format_3(i as _, flags, name_id.into(), *value, *linked)
-                    }
+                    AxisLocation::Three { value, linked, .. } => tables::stat::AxisValue::format_3(
+                        i as _,
+                        flags,
+                        name_id.into(),
+                        *value,
+                        *linked,
+                    ),
 
                     AxisLocation::Four(_) => panic!("assigned to separate group"),
                 };
