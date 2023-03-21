@@ -227,7 +227,7 @@ impl StatBuilder {
             let name_id = name_builder.add_anon_group(&record.name);
             let record = tables::stat::AxisRecord {
                 axis_tag: record.tag,
-                axis_name_id: name_id,
+                axis_name_id: name_id.into(),
                 axis_ordering: record.ordering,
             };
             for axis_value in sorted_values
@@ -240,15 +240,15 @@ impl StatBuilder {
                 let value = match &axis_value.location {
                     AxisLocation::One { value, .. } => tables::stat::AxisValue::format_1(
                         //TODO: validate that all referenced tags refer to existing axes
-                        i as u16, flags, name_id, *value,
+                        i as u16, flags, name_id.into(), *value,
                     ),
                     AxisLocation::Two {
                         nominal, min, max, ..
                     } => tables::stat::AxisValue::format_2(
-                        i as _, flags, name_id, *nominal, *min, *max,
+                        i as _, flags, name_id.into(), *nominal, *min, *max,
                     ),
                     AxisLocation::Three { value, linked, .. } => {
-                        tables::stat::AxisValue::format_3(i as _, flags, name_id, *value, *linked)
+                        tables::stat::AxisValue::format_3(i as _, flags, name_id.into(), *value, *linked)
                     }
 
                     AxisLocation::Four(_) => panic!("assigned to separate group"),
@@ -273,12 +273,12 @@ impl StatBuilder {
                     tables::stat::AxisValueRecord::new(axis_index as _, *value)
                 })
                 .collect();
-            tables::stat::AxisValue::format_4(flags, name_id, mapping)
+            tables::stat::AxisValue::format_4(flags, name_id.into(), mapping)
         });
 
         //feaLib puts format4 records first
         let axis_values = format4.chain(axis_values).collect();
-        tables::stat::Stat::new(design_axes, axis_values, elided_fallback_name_id)
+        tables::stat::Stat::new(design_axes, axis_values, elided_fallback_name_id.into())
     }
 }
 
@@ -389,7 +389,7 @@ impl NameSpec {
             self.platform_id,
             self.encoding_id,
             self.language_id,
-            name_id,
+            name_id.into(),
             string.into(),
         )
     }
@@ -402,19 +402,19 @@ impl CvParams {
     ) -> write_fonts::tables::layout::CharacterVariantParams {
         let mut out = write_fonts::tables::layout::CharacterVariantParams::default();
         if !self.feat_ui_label_name.is_empty() {
-            out.feat_ui_label_name_id = names.add_anon_group(&self.feat_ui_label_name);
+            out.feat_ui_label_name_id = names.add_anon_group(&self.feat_ui_label_name).into();
         }
         if !self.feat_ui_tooltip_text_name.is_empty() {
             out.feat_ui_tooltip_text_name_id =
-                names.add_anon_group(&self.feat_ui_tooltip_text_name);
+                names.add_anon_group(&self.feat_ui_tooltip_text_name).into();
         }
 
         if !self.samle_text_name.is_empty() {
-            out.sample_text_name_id = names.add_anon_group(&self.samle_text_name);
+            out.sample_text_name_id = names.add_anon_group(&self.samle_text_name).into();
         }
 
         if let Some((first, rest)) = self.param_ui_label_names.split_first() {
-            out.first_param_ui_label_name_id = names.add_anon_group(first);
+            out.first_param_ui_label_name_id = names.add_anon_group(first).into();
             for item in rest {
                 names.add_anon_group(item);
             }

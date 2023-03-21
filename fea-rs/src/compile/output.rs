@@ -118,7 +118,7 @@ impl Compilation {
 
         for (tag, names) in self.tables.stylistic_sets.iter() {
             let id = name_builder.add_anon_group(names);
-            let params = FeatureParams::StylisticSet(StylisticSetParams::new(id));
+            let params = FeatureParams::StylisticSet(StylisticSetParams::new(id.into()));
             feature_params.insert((tags::GSUB, *tag), params);
         }
 
