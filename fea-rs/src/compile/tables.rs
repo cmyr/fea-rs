@@ -16,7 +16,7 @@ use write_fonts::{
         },
         layout::{ClassDef, ClassDefBuilder, CoverageTableBuilder},
     },
-    types::{Fixed, LongDateTime, Tag, Uint24},
+    types::{Fixed, LongDateTime, NameId, Tag, Uint24},
     validate::ValidationReport,
 };
 
@@ -185,7 +185,7 @@ pub enum AxisLocation {
 
 #[derive(Clone, Debug)]
 pub enum StatFallbackName {
-    Id(u16),
+    Id(NameId),
     Record(Vec<NameSpec>),
 }
 
@@ -227,7 +227,7 @@ impl StatBuilder {
             let name_id = name_builder.add_anon_group(&record.name);
             let record = tables::stat::AxisRecord {
                 axis_tag: record.tag,
-                axis_name_id: name_id.into(),
+                axis_name_id: name_id,
                 axis_ordering: record.ordering,
             };
             for axis_value in sorted_values
@@ -240,28 +240,16 @@ impl StatBuilder {
                 let value = match &axis_value.location {
                     AxisLocation::One { value, .. } => tables::stat::AxisValue::format_1(
                         //TODO: validate that all referenced tags refer to existing axes
-                        i as u16,
-                        flags,
-                        name_id.into(),
-                        *value,
+                        i as u16, flags, name_id, *value,
                     ),
                     AxisLocation::Two {
                         nominal, min, max, ..
                     } => tables::stat::AxisValue::format_2(
-                        i as _,
-                        flags,
-                        name_id.into(),
-                        *nominal,
-                        *min,
-                        *max,
+                        i as _, flags, name_id, *nominal, *min, *max,
                     ),
-                    AxisLocation::Three { value, linked, .. } => tables::stat::AxisValue::format_3(
-                        i as _,
-                        flags,
-                        name_id.into(),
-                        *value,
-                        *linked,
-                    ),
+                    AxisLocation::Three { value, linked, .. } => {
+                        tables::stat::AxisValue::format_3(i as _, flags, name_id, *value, *linked)
+                    }
 
                     AxisLocation::Four(_) => panic!("assigned to separate group"),
                 };
@@ -285,12 +273,12 @@ impl StatBuilder {
                     tables::stat::AxisValueRecord::new(axis_index as _, *value)
                 })
                 .collect();
-            tables::stat::AxisValue::format_4(flags, name_id.into(), mapping)
+            tables::stat::AxisValue::format_4(flags, name_id, mapping)
         });
 
         //feaLib puts format4 records first
         let axis_values = format4.chain(axis_values).collect();
-        tables::stat::Stat::new(design_axes, axis_values, elided_fallback_name_id.into())
+        tables::stat::Stat::new(design_axes, axis_values, elided_fallback_name_id)
     }
 }
 
@@ -339,7 +327,7 @@ impl Base {
 
 #[derive(Clone, Debug)]
 pub struct NameBuilder {
-    records: Vec<(u16, NameSpec)>,
+    records: Vec<(NameId, NameSpec)>,
     last_anon_id: u16,
 }
 
@@ -353,12 +341,12 @@ impl Default for NameBuilder {
 }
 
 impl NameBuilder {
-    pub(crate) fn add(&mut self, name_id: u16, name_spec: NameSpec) {
-        self.last_anon_id = self.last_anon_id.max(name_id);
+    pub(crate) fn add(&mut self, name_id: NameId, name_spec: NameSpec) {
+        self.last_anon_id = self.last_anon_id.max(name_id.to_u16());
         self.records.push((name_id, name_spec));
     }
 
-    pub(crate) fn add_anon_group(&mut self, entries: &[NameSpec]) -> u16 {
+    pub(crate) fn add_anon_group(&mut self, entries: &[NameSpec]) -> NameId {
         let name_id = self.next_name_id();
         for name in entries {
             self.add(name_id, name.clone());
@@ -366,12 +354,12 @@ impl NameBuilder {
         name_id
     }
 
-    pub(crate) fn contains_id(&self, id: u16) -> bool {
+    pub(crate) fn contains_id(&self, id: NameId) -> bool {
         self.records.iter().any(|(name_id, _)| name_id == &id)
     }
 
-    pub(crate) fn next_name_id(&self) -> u16 {
-        self.last_anon_id + 1
+    pub(crate) fn next_name_id(&self) -> NameId {
+        NameId::new(self.last_anon_id + 1)
     }
 
     pub(crate) fn build(&self) -> Option<write_fonts::tables::name::Name> {
@@ -395,13 +383,13 @@ impl NameSpec {
     }
 
     //TODO: rename me to build
-    pub fn to_otf(&self, name_id: u16) -> write_fonts::tables::name::NameRecord {
+    pub fn to_otf(&self, name_id: NameId) -> write_fonts::tables::name::NameRecord {
         let string = parse_string(self.platform_id, self.string.trim_matches('"'));
         write_fonts::tables::name::NameRecord::new(
             self.platform_id,
             self.encoding_id,
             self.language_id,
-            name_id.into(),
+            name_id,
             string.into(),
         )
     }
@@ -414,19 +402,19 @@ impl CvParams {
     ) -> write_fonts::tables::layout::CharacterVariantParams {
         let mut out = write_fonts::tables::layout::CharacterVariantParams::default();
         if !self.feat_ui_label_name.is_empty() {
-            out.feat_ui_label_name_id = names.add_anon_group(&self.feat_ui_label_name).into();
+            out.feat_ui_label_name_id = names.add_anon_group(&self.feat_ui_label_name);
         }
         if !self.feat_ui_tooltip_text_name.is_empty() {
             out.feat_ui_tooltip_text_name_id =
-                names.add_anon_group(&self.feat_ui_tooltip_text_name).into();
+                names.add_anon_group(&self.feat_ui_tooltip_text_name);
         }
 
         if !self.samle_text_name.is_empty() {
-            out.sample_text_name_id = names.add_anon_group(&self.samle_text_name).into();
+            out.sample_text_name_id = names.add_anon_group(&self.samle_text_name);
         }
 
         if let Some((first, rest)) = self.param_ui_label_names.split_first() {
-            out.first_param_ui_label_name_id = names.add_anon_group(first).into();
+            out.first_param_ui_label_name_id = names.add_anon_group(first);
             for item in rest {
                 names.add_anon_group(item);
             }
