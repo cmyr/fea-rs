@@ -6,7 +6,7 @@ use clap::Parser;
 use fea_rs::{
     compile::{
         self,
-        error::{FontGlyphOrderError, GlyphOrderError, UfoGlyphOrderError},
+        error::{CompilerError, FontGlyphOrderError, GlyphOrderError, UfoGlyphOrderError},
         Compiler, Opts,
     },
     GlyphMap,
@@ -33,7 +33,8 @@ fn main() -> Result<(), Error> {
     let raw_font = compiled
         .assemble(&glyph_names, opts)
         .expect("ttf compile failed")
-        .build();
+        .build()
+        .map_err(CompilerError::FontBuildFailed)?;
 
     log::info!("writing {} bytes to {}", raw_font.len(), path.display());
     std::fs::write(path, raw_font).map_err(Into::into)

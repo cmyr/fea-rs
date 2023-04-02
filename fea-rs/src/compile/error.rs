@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use write_fonts::{read::ReadError, validate::ValidationReport};
+use write_fonts::{read::ReadError, validate::ValidationReport, BuildFontError};
 
 use crate::{
     parse::{SourceList, SourceLoadError},
@@ -65,6 +65,8 @@ pub enum CompilerError {
     CompilationFail(DiagnosticSet),
     #[error("Binary generation failed: '{0}'")]
     WriteFail(#[from] BinaryCompilationError),
+    #[error("Font generation failed: '{0:?}'")]
+    FontBuildFailed(BuildFontError),
 }
 
 /// An error that occured when generating the binary font
