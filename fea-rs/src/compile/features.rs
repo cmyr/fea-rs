@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use smol_str::SmolStr;
 use write_fonts::{
     tables::layout::{ConditionSet, FeatureParams, SizeParams, StylisticSetParams},
     types::{GlyphId, Tag, Uint24},
@@ -91,6 +92,15 @@ pub(crate) enum SpecialVerticalFeatureState {
     /// we are inside a lookup in a special vertical feature (and so should not
     /// behave specially)
     InnerLookup,
+}
+
+/// maps names to conditionsets, also tracking declaration order (which
+/// is maintained in the final output table)
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ConditionSetMap {
+    named_conditionsets: HashMap<SmolStr, ConditionSet>,
+    // used for sorting
+    decl_order: HashMap<ConditionSet, usize>,
 }
 
 impl AllFeatures {
@@ -510,6 +520,33 @@ impl SpecialVerticalFeatureState {
 
     pub(crate) fn in_eligible_vertical_feature(&self) -> bool {
         *self == Self::Root
+    }
+}
+
+impl ConditionSetMap {
+    pub(crate) fn insert(&mut self, label: SmolStr, conditionset: ConditionSet) {
+        self.named_conditionsets.insert(label, conditionset.clone());
+        let idx = self.decl_order.len();
+        self.decl_order.insert(conditionset, idx);
+    }
+
+    pub(crate) fn get(&self, label: &SmolStr) -> Option<&ConditionSet> {
+        self.named_conditionsets.get(label)
+    }
+
+    // we also need an appropriate sort order for the null conditionset,
+    // which isn't ever defined anywhere; we consider it to be declared the first
+    // time it is referenced (unless there's an explicit null conditionset somewhere?)
+    pub(crate) fn define_null_condition_set_if_needed(&mut self) {
+        let idx = self.decl_order.len();
+        self.decl_order
+            .entry(ConditionSet::default())
+            .or_insert(idx);
+    }
+
+    pub(crate) fn decl_order(&self, condition: &ConditionSet) -> usize {
+        // only used after all conditionsets in the file have been added
+        *self.decl_order.get(condition).unwrap()
     }
 }
 
