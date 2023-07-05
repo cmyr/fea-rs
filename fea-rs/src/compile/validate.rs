@@ -761,6 +761,9 @@ impl<'a> ValidationCtx<'a> {
         for item in node.statements() {
             if item.kind().is_rule() {
                 match kind {
+                    // we allow mixed rules in this specific case
+                    Some(Kind::GsubType1 | Kind::GsubType2)
+                        if matches!(item.kind(), Kind::GsubType1 | Kind::GsubType2) => {}
                     Some(kind) if kind != item.kind() => self.error(
                         item.range(),
                         format!(
