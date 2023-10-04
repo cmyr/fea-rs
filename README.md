@@ -48,6 +48,18 @@ data. There are three different formats for this:
   feaLib][feaLib tests]. This ensures that we generate equivalent output to
   feaLib.
 
+## releasing
+
+To release a new version of `fea-rs`:
+
+- update the version in `fea-rs/Cargo.toml`, and get this change merged, then *either*:
+    - install `cargo-release` (`cargo install cargo-release`)
+    - call `cargo release` and follow the instructions
+- *or*:
+    - publish the crate with `cargo publish` (you may need to pass `-p fea-rs` or
+      otherwise call this from within the `fea-rs` package directory)
+    - tag and push with `git tag vX.Y.Z` and `git push --tags`
+
 ## architecture sketch
 
 The overall design of this crate is heavily inspired by the design of [rust
