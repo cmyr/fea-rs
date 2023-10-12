@@ -58,13 +58,16 @@ fn run() -> Result<(), Error> {
         .expect("ttf compile failed");
 
     log::info!("writing {} bytes to {}", raw_font.len(), path.display());
-    std::fs::write(path, raw_font).map_err(Into::into)
+    std::fs::write(path, raw_font).map_err(|e| Error::file_error(path, e))
 }
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
-    #[error("io error: '{0}'")]
-    File(#[from] std::io::Error),
+    #[error("Io error for path {path}, error '{inner}'")]
+    File {
+        path: PathBuf,
+        inner: std::io::Error,
+    },
     #[error("Couldn't read UFO: '{0}'")]
     Ufo(Box<norad::error::FontLoadError>),
     #[error("invalid glyph map: '{0}'")]
@@ -81,6 +84,15 @@ enum Error {
     BadAxisInfo { line: usize, message: String },
     #[error("{0}")]
     CompileFail(#[from] compile::error::CompilerError),
+}
+
+impl Error {
+    fn file_error(path: impl Into<PathBuf>, error: std::io::Error) -> Self {
+        Self::File {
+            path: path.into(),
+            inner: error,
+        }
+    }
 }
 
 /// Compile FEA files
@@ -148,10 +160,11 @@ impl Args {
             Ok((fea_path, glyph_order))
         } else {
             let order = if let Some(path) = self.glyph_order() {
-                let contents = std::fs::read_to_string(path)?;
+                let contents =
+                    std::fs::read_to_string(path).map_err(|e| Error::file_error(path, e))?;
                 compile::parse_glyph_order(&contents)?
             } else if let Some(path) = self.font.as_deref() {
-                let bytes = std::fs::read(path)?;
+                let bytes = std::fs::read(path).map_err(|e| Error::file_error(path, e))?;
                 compile::get_post_glyph_order(&bytes)?
             } else {
                 return Err(Error::MissingGlyphOrder);
@@ -167,7 +180,7 @@ impl Args {
 
         let contents = match std::fs::read_to_string(path) {
             Ok(s) => s,
-            Err(e) => return Some(Err(e.into())),
+            Err(e) => return Some(Err(Error::file_error(path, e))),
         };
         Some(
             MockVariationInfo::from_cli_input(&contents)
