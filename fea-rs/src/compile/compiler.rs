@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     error::{CompilerError, DiagnosticSet},
-    Compilation, Opts, VariationInfo,
+    Compilation, FeatureProvider, Opts, VariationInfo,
 };
 
 const DEFAULT_N_MESSAGES_TO_PRINT: usize = 100;
@@ -35,6 +35,7 @@ pub struct Compiler<'a> {
     glyph_map: &'a GlyphMap,
     // variable fonts only
     var_info: Option<&'a dyn VariationInfo>,
+    feature_writer: Option<&'a dyn FeatureProvider>,
     print_warnings: bool,
     max_n_errors: usize,
     opts: Opts,
@@ -55,6 +56,7 @@ impl<'a> Compiler<'a> {
             root_path: root_path.into(),
             glyph_map,
             var_info: None,
+            feature_writer: None,
             opts: Default::default(),
             print_warnings: true,
             resolver: Default::default(),
@@ -72,6 +74,12 @@ impl<'a> Compiler<'a> {
     /// Provide [`VariationInfo`], necessary when compiling features for a variable font.
     pub fn with_variable_info(mut self, var_info: &'a dyn VariationInfo) -> Self {
         self.var_info = Some(var_info);
+        self
+    }
+
+    /// Provide [`FeatureWriter`] to provide additional features during compilation
+    pub fn with_feature_writer(mut self, feature_writer: &'a dyn FeatureProvider) -> Self {
+        self.feature_writer = Some(feature_writer);
         self
     }
 
@@ -140,7 +148,12 @@ impl<'a> Compiler<'a> {
         let diagnostics = super::validate(&tree, self.glyph_map, self.var_info);
         print_warnings_return_errors(diagnostics, &tree, self.print_warnings, self.max_n_errors)
             .map_err(CompilerError::ValidationFail)?;
-        let mut ctx = super::CompilationCtx::new(self.glyph_map, tree.source_map(), self.var_info);
+        let mut ctx = super::CompilationCtx::new(
+            self.glyph_map,
+            tree.source_map(),
+            self.var_info,
+            self.feature_writer,
+        );
         ctx.compile(&tree.typed_root());
 
         // we 'take' the errors here because it's easier for us to handle the

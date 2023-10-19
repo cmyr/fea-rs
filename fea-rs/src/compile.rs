@@ -13,6 +13,9 @@ use self::{
 use self::error::UfoGlyphOrderError;
 
 pub use compiler::Compiler;
+pub use feature_writer::{FeatureBuilder, FeatureProvider};
+pub use language_system::LanguageSystem;
+pub use lookups::{FeatureKey, LookupId, PairPosBuilder};
 pub use opts::Opts;
 pub use output::Compilation;
 pub use variations::{AxisInfo, AxisLocation, VariationInfo};
@@ -23,6 +26,7 @@ pub(crate) use variations::MockVariationInfo;
 mod compile_ctx;
 mod compiler;
 pub mod error;
+mod feature_writer;
 mod features;
 mod glyph_range;
 mod language_system;
