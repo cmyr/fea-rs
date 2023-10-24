@@ -37,10 +37,11 @@ pub trait VariationInfo {
     ) -> Result<(i16, Vec<(VariationRegion, i16)>), AnyError>;
 }
 
-type AnyError = Box<dyn std::error::Error>;
+pub type AnyError = Box<dyn std::error::Error>;
 
 // btreemap only because hashmap is not hashable
-type Location = BTreeMap<Tag, AxisLocation>;
+/// A position in variation space
+pub type Location = BTreeMap<Tag, AxisLocation>;
 
 /// A location on an axis, in one of three coordinate spaces
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

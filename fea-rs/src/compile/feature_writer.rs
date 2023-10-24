@@ -3,13 +3,19 @@
 use std::collections::{BTreeMap, HashMap};
 
 use smol_str::SmolStr;
-use write_fonts::tables::{
-    gpos::AnchorTable,
-    layout::{LookupFlag, PendingVariationIndex},
-    variations::VariationRegion,
+use write_fonts::{
+    tables::{
+        gpos::AnchorTable,
+        layout::{LookupFlag, PendingVariationIndex},
+        variations::VariationRegion,
+    },
+    types::GlyphId,
 };
 
-use crate::common::{GlyphClass, MarkClass};
+use crate::{
+    common::{GlyphClass, MarkClass},
+    compile::variations::Location,
+};
 
 use super::{
     features::FeatureLookups,
@@ -91,6 +97,58 @@ impl<'a> FeatureBuilder<'a> {
     ) {
         self.mark_classes
             .insert(class_name.into(), MarkClass { members });
+    }
+
+    /// Define a mark class with a variable anchor.
+    ///
+    /// Roughly equivalent to `markClass glyph|class <anchor x y> @name{};`
+    /// [markClass](https://adobe-type-tools.github.io/afdko/OpenTypeFeatureFileSpecification.html#4.f)
+    /// with a variable anchor record.
+    pub fn add_mark_class_for_glyph(
+        &mut self,
+        gid: GlyphId,
+        default_anchor: (i16, i16),
+        class_name: impl Into<SmolStr>,
+        _anchor_variations: HashMap<Location, (i16, i16)>,
+    ) {
+        // TODO: an error type
+        eprintln!(
+            "TODO: {}",
+            format!(
+                "markClass {} <anchor {} {}> @{}; # TODO variable anchor",
+                gid,
+                default_anchor.0,
+                default_anchor.1,
+                class_name.into()
+            )
+        );
+    }
+
+    /// Setup a mark to base.
+    ///
+    /// Pseudo-fea:
+    ///
+    /// ```text
+    /// lookup name {
+    ///     pos base base_name <anchor x y> @markclass;
+    ///     // plus variations of anchor pos
+    /// }
+    ///
+    /// <https://adobe-type-tools.github.io/afdko/OpenTypeFeatureFileSpecification.html#6.d>
+    /// ```
+    pub fn add_mark_base_pos(
+        &mut self,
+        lookup_name: impl Into<SmolStr>,
+        base_name: impl Into<SmolStr>,
+        class_name: impl Into<SmolStr>,
+        default_anchor: (i16, i16),
+        _anchor_variations: HashMap<Location, (i16, i16)>,
+    ) {
+        // TODO: an error type
+        let lookup_name = lookup_name.into();
+        let base_name = base_name.into();
+        let class_name = class_name.into();
+        eprintln!("  lookup {lookup_name} {{\n    pos base {base_name} <anchor {} {}> @{class_name}; # TODO variable anchor;\n  }} {lookup_name};", default_anchor.0, default_anchor.1);
     }
 
     /// Create a new lookup.

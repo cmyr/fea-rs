@@ -21,7 +21,7 @@ pub use lookups::{
 };
 pub use opts::Opts;
 pub use output::Compilation;
-pub use variations::{AxisInfo, AxisLocation, VariationInfo};
+pub use variations::{AxisInfo, AxisLocation, Location, VariationInfo};
 
 #[cfg(any(test, feature = "test"))]
 pub(crate) use variations::MockVariationInfo;
